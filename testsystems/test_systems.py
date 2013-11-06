@@ -58,7 +58,7 @@ import simtk.unit as units
 import simtk.openmm.app as app
 
 
-class HarmonicOscillator():
+class HarmonicOscillator(object):
     """Create a 3D harmonic oscillator, with a single particle confined in an isotropic harmonic well.
 
     Parameters
@@ -117,7 +117,7 @@ class HarmonicOscillator():
         self.K, self.mass = K, mass
         self.system, self.coordinates = system, coordinates
 
-class Diatom():
+class Diatom(object):
     """Create a free diatomic molecule with a single harmonic bond between the two atoms.
 
     Parameters
@@ -192,7 +192,7 @@ class Diatom():
         self.K, self.r0, self.m1, self.m2, self.constraint, self.use_central_potential = K, r0, m1, m2, constraint, use_central_potential
 
 
-class ConstraintCoupledHarmonicOscillator():
+class ConstraintCoupledHarmonicOscillator(object):
     """Create a pair of particles in 3D harmonic oscillator wells, coupled by a constraint.
 
     Parameters
@@ -265,7 +265,7 @@ class ConstraintCoupledHarmonicOscillator():
         self.K, self.d, self.mass = K, d, mass
 
 
-class HarmonicOscillatorArray():
+class HarmonicOscillatorArray(object):
     """Create a 1D array of noninteracting particles in 3D harmonic oscillator wells.
     
     Parameters
@@ -333,7 +333,7 @@ class HarmonicOscillatorArray():
         self.K, self.d, self.mass, self.N = K, d, mass, N
 
 
-class SodiumChlorideCrystal():
+class SodiumChlorideCrystal(object):
     """Create an FCC crystal of sodium chloride.
 
     Each atom is represented by a charged Lennard-Jones sphere in an Ewald lattice.
@@ -411,7 +411,7 @@ class SodiumChlorideCrystal():
         self.system, self.coordinates = system, coordinates
 
 
-class LennardJonesCluster():
+class LennardJonesCluster(object):
     """Create a non-periodic rectilinear grid of Lennard-Jones particles in a harmonic restraining potential.
 
 
@@ -492,7 +492,7 @@ class LennardJonesCluster():
         self.system, self.coordinates = system, coordinates
 
 
-class LennardJonesFluid():
+class LennardJonesFluid(object):
     """Create a periodic rectilinear grid of Lennard-Jones particles.    
     Parameters for argon are used by default. Cutoff is set to 3 sigma by default.
     
@@ -624,7 +624,7 @@ class LennardJonesFluid():
         self.system, self.coordinates = system, coordinates
 
 
-class CustomLennardJonesFluid():
+class CustomLennardJonesFluid(object):
     """Create a periodic rectilinear grid of Lennard-Jones particled, but implemented via CustomBondForce rather than NonbondedForce.
     Parameters for argon are used by default. Cutoff is set to 3 sigma by default.
     
@@ -772,7 +772,7 @@ class CustomLennardJonesFluid():
         self.system, self.coordinates = system, coordinates
 
 
-class IdealGas():
+class IdealGas(object):
     """Create an 'ideal gas' of noninteracting particles in a periodic box.
 
     Parameters
@@ -835,7 +835,7 @@ class IdealGas():
         self.system, self.coordinates = system, coordinates
 
 
-class WaterBox():
+class WaterBox(object):
     """Create a test system containing a periodic box of TIP3P water.
 
     Flexible bonds and angles are always added, and constraints are optional (but on by default).
@@ -1025,7 +1025,7 @@ class WaterBox():
         self.system, self.coordinates = system, coordinates
 
 
-class AlanineDipeptideImplicit():
+class AlanineDipeptideImplicit(object):
     """Alanine dipeptide ff96 in OBC GBSA implicit solvent.
     
     Parameters
@@ -1059,7 +1059,7 @@ class AlanineDipeptideImplicit():
         self.system, self.coordinates = system, coordinates
 
 
-class AlanineDipeptideExplicit():
+class AlanineDipeptideExplicit(object):
     """Alanine dipeptide ff96 in TIP3P explicit solvent with PME electrostatics.
     
     Parameters
@@ -1098,7 +1098,7 @@ class AlanineDipeptideExplicit():
         self.system, self.coordinates = system, coordinates
 
 
-class LysozymeImplicit():
+class LysozymeImplicit(object):
     """T4 lysozyme L99A (AMBER ff96) with p-xylene ligand (GAFF + AM1-BCC) in implicit OBC GBSA solvent.
 
     Parameters
@@ -1131,7 +1131,7 @@ class LysozymeImplicit():
         self.system, self.coordinates = system, coordinates
 
 
-class SrcImplicit():
+class SrcImplicit(object):
     """Src kinase in implicit AMBER 99sb-ildn with OBC GBSA solvent.
 
     Examples
@@ -1161,7 +1161,7 @@ class SrcImplicit():
         self.system, self.coordinates = system, coordinates
 
 
-class SrcExplicit():
+class SrcExplicit(object):
     """Src kinase (AMBER 99sb-ildn) in explicit TIP3P solvent.
 
     Examples
@@ -1193,7 +1193,7 @@ class SrcExplicit():
         self.system, self.coordinates = system, coordinates
 
 
-class MethanolBox():
+class MethanolBox(object):
     """Methanol box.
 
     Parameters
@@ -1237,7 +1237,7 @@ class MethanolBox():
 # Molecular ideal gas (methanol box).
 #=============================================================================================
 
-class MolecularIdealGas():
+class MolecularIdealGas(object):
     """Molecular ideal gas (methanol box).
 
     Parameters
@@ -1320,7 +1320,7 @@ class MolecularIdealGas():
         self.system, self.coordinates = system, coordinates
 
 
-class CustomGBForceSystem():
+class CustomGBForceSystem(object):
     """A system of particles with a CustomGBForce.
 
     Notes
