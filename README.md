@@ -8,3 +8,6 @@ OpenMM objects for simulating the desired systems.
 
 These classes will also contain the member functions that calculate known
 analytical properties of these systems, enabling the proper testing.
+
+Note: setup.py does not currently work.  Also, the doctests must be run
+from the testsystems directory.  This will be fixed.
