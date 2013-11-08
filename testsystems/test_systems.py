@@ -139,24 +139,57 @@ class TestSystem(object):
         Returns
         -------
         
-        potential_mean : simtk.unit.Quantity compatible with simtk.unit.nanometers
+        potential_mean : simtk.unit.Quantity compatible with simtk.unit.kilojoules_per_mole
             mean potential energy if implemented, or else None
         
         """
         raise NotImplementedException()
 
-    def getPotentialStddev(self):
+    def getPotentialStandardDeviation(self):
         """Return the standard deviation of the potential energy, computed analytically or numerically.
 
         Returns
         -------
         
-        potential_stddev : simtk.unit.Quantity compatible with simtk.unit.nanometers
+        potential_stddev : simtk.unit.Quantity compatible with simtk.unit.kilojoules_per_mole
             potential energy standard deviation if implemented, or else None
         
         """
         return None
+
+    def getVolumeExpectation(self):
+        """Return the expectation of the volume, computed analytically or numerically.
+
+        Returns
+        -------
         
+        volume_mean : simtk.unit.Quantity compatible with simtk.unit.nanometers**3
+            volume energy if implemented, or else None
+        
+        Notes
+        -----
+
+        This property is only sensible to implement for periodic systems.
+        
+        """
+        raise NotImplementedException()
+
+    def getVolumeStandardDeviaton(self):
+        """Return the standard deviation of the volume, computed analytically or numerically.
+
+        Returns
+        -------
+        
+        volume_stddev : simtk.unit.Quantity compatible with simtk.unit.nanometers**3
+            volume standard deviation if implemented, or else None
+
+        Notes
+        -----
+
+        This property is only sensible to implement for periodic systems.
+        
+        """
+        return None        
 
 class HarmonicOscillator(TestSystem):
     """Create a 3D harmonic oscillator, with a single particle confined in an isotropic harmonic well.
