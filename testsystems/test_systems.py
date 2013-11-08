@@ -57,10 +57,6 @@ import simtk.openmm as mm
 import simtk.unit as units
 import simtk.openmm.app as app
 
-class NotImplementedException(Exception):
-    """Exception denoting the analytical property computation is not implemented."""
-    pass
-
 class TestSystem(object):
     """Abstract base class for test systems, demonstrating how to implement a test system.
 
@@ -86,20 +82,12 @@ class TestSystem(object):
 
     >>> testsystem = TestSystem()
     
-    Retrieve System object using the method.
+    Retrieve System object.
 
     >>> system = testsystem.getSystem()
-    
-    Retrieve the System object using the attribute.
-    
-    >>> system = testsystem.system
 
     Retrieve the positions.
     
-    >>> positions = testsystem.positions
-    
-    or 
-
     >>> positions = testsystem.getPositions()
     
 
@@ -111,6 +99,9 @@ class TestSystem(object):
         
         # Store the system.
         self.system = system
+
+        # Store positions.
+        self.positions = units.Quantity(np.zeros([0,3], np.float), units.nanometers)
 
     def getSystem(self):
         """Retrieve the System object.
@@ -149,7 +140,7 @@ class TestSystem(object):
         -------
         
         potential_mean : simtk.unit.Quantity compatible with simtk.unit.nanometers
-            mean potential energy if implemented, or else NotImplementedException
+            mean potential energy if implemented, or else None
         
         """
         raise NotImplementedException()
@@ -161,10 +152,10 @@ class TestSystem(object):
         -------
         
         potential_stddev : simtk.unit.Quantity compatible with simtk.unit.nanometers
-            potential energy standard deviation if implemented, or else NotImplementedException
+            potential energy standard deviation if implemented, or else None
         
         """
-        raise NotImplementedException()
+        return None
         
 
 class HarmonicOscillator(object):
