@@ -57,6 +57,10 @@ import simtk.openmm as mm
 import simtk.unit as units
 import simtk.openmm.app as app
 
+class NotImplementedException(Exception):
+    """Exception denoting the analytical property computation is not implemented."""
+    pass
+
 class TestSystem(object):
     """Abstract base class for test systems, demonstrating how to implement a test system.
 
@@ -137,7 +141,32 @@ class TestSystem(object):
         """
         
         return self.positions
+
+    def getPotentialExpectation(self):
+        """Return the expectation of the potential energy, computed analytically or numerically.
+
+        Returns
+        -------
         
+        potential_mean : simtk.unit.Quantity compatible with simtk.unit.nanometers
+            mean potential energy if implemented, or else NotImplementedException
+        
+        """
+        raise NotImplementedException()
+
+    def getPotentialStddev(self):
+        """Return the standard deviation of the potential energy, computed analytically or numerically.
+
+        Returns
+        -------
+        
+        potential_stddev : simtk.unit.Quantity compatible with simtk.unit.nanometers
+            potential energy standard deviation if implemented, or else NotImplementedException
+        
+        """
+        raise NotImplementedException()
+        
+
 class HarmonicOscillator(object):
     """Create a 3D harmonic oscillator, with a single particle confined in an isotropic harmonic well.
 
