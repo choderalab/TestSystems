@@ -118,11 +118,6 @@ class TestSystem(object):
     def getPositions(self):
         """Retrieve the positions associated with this System.
         
-        Parameters
-        ----------
-        asNumpy : bool, optional, default=False
-        
-
         Returns
         -------
         
@@ -133,61 +128,97 @@ class TestSystem(object):
         
         return self.positions
 
-    def getPotentialExpectation(self):
-        """Return the expectation of the potential energy, computed analytically or numerically.
+    def getPotentialExpectation(self, temperature, pressure=None):
+        """Return the expectation of the potential energy in the NVT or NPT ensemble, computed analytically or numerically.
 
+        Parameters
+        ----------
+
+        temperature : simtk.unit.Quantity compatible with simtk.unit.kelvin
+            The temperature at which the expectation is to be computed.
+
+        pressure : simtk.unit.Quantity compatible with simtk.unit.atmospheres, optional
+            The pressure at which the expectation is to be computed.
+        
         Returns
         -------
         
         potential_mean : simtk.unit.Quantity compatible with simtk.unit.kilojoules_per_mole
-            mean potential energy if implemented, or else None
+            The potential energy expectation, or else None if not implemented.
         
         """
-        raise NotImplementedException()
+        return None
 
-    def getPotentialStandardDeviation(self):
-        """Return the standard deviation of the potential energy, computed analytically or numerically.
+    def getPotentialStandardDeviation(self, temperature, pressure=None):
+        """Return the standard deviation of the potential energy in the NVT or NPT ensemble, computed analytically or numerically.
+
+        Parameters
+        ----------
+
+        temperature : simtk.unit.Quantity compatible with simtk.unit.kelvin
+            The temperature at which the expectation is to be computed.
+
+        pressure : simtk.unit.Quantity compatible with simtk.unit.atmospheres, optional
+            The pressure at which the expectation is to be computed.
 
         Returns
         -------
         
         potential_stddev : simtk.unit.Quantity compatible with simtk.unit.kilojoules_per_mole
-            potential energy standard deviation if implemented, or else None
+            The potential energy standard deviation, or else None if not implemented.
         
         """
         return None
 
-    def getVolumeExpectation(self):
+    def getVolumeExpectation(self, temperature, pressure):
         """Return the expectation of the volume, computed analytically or numerically.
+
+        Parameters
+        ----------
+
+        temperature : simtk.unit.Quantity compatible with simtk.unit.kelvin
+            The temperature at which the expectation is to be computed.
+
+        pressure : simtk.unit.Quantity compatible with simtk.unit.atmospheres
+            The pressure at which the expectation is to be computed.
 
         Returns
         -------
         
         volume_mean : simtk.unit.Quantity compatible with simtk.unit.nanometers**3
-            volume energy if implemented, or else None
-        
+            The volume expectation, or else None if not implemented.
+            
         Notes
         -----
 
         This property is only sensible to implement for periodic systems.
-        
+
         """
         raise NotImplementedException()
 
-    def getVolumeStandardDeviaton(self):
+    def getVolumeStandardDeviaton(self, temperature, pressure):
         """Return the standard deviation of the volume, computed analytically or numerically.
+
+        Parameters
+        ----------
+
+        temperature : simtk.unit.Quantity compatible with simtk.unit.kelvin
+            The temperature at which the expectation is to be computed.
+
+        pressure : simtk.unit.Quantity compatible with simtk.unit.atmospheres
+            The pressure at which the expectation is to be computed.
 
         Returns
         -------
         
         volume_stddev : simtk.unit.Quantity compatible with simtk.unit.nanometers**3
-            volume standard deviation if implemented, or else None
-
-        Notes
-        -----
-
-        This property is only sensible to implement for periodic systems.
+            The volume standard deviation, or else None if not implemented.
         
+        Note
+        ----
+            
+        This property is only sensible to implement for periodic systems.
+
         """
         return None        
 
@@ -214,20 +245,32 @@ class HarmonicOscillator(TestSystem):
     The natural period of a harmonic oscillator is T = sqrt(m/K), so you will want to use an
     integration timestep smaller than ~ T/10.
 
+    The standard deviation in position in each dimension is sigma = (kT / K)^(1/2)
+
+    The expectation and standard deviation of the potential energy of a 3D harmonic oscillator is (3/2)kT.
+
     Examples
     --------
 
-    Create a 3D harmonic oscillator with default parameters.
+    Create a 3D harmonic oscillator with default parameters:
 
     >>> ho = HarmonicOscillator()
     >>> (system, positions) = ho.system, ho.positions
 
-    Create a harmonic oscillator with specified mass and spring constant.
+    Create a harmonic oscillator with specified mass and spring constant:
 
     >>> mass = 12.0 * units.amu
     >>> K = 1.0 * units.kilocalories_per_mole / units.angstroms**2
     >>> ho = HarmonicOscillator(K=K, mass=mass)
     >>> (system, positions) = ho.system, ho.positions
+
+    Compute the potential expectation and standard deviation
+
+    >>> import simtk.unit as u
+    >>> temperature = 298 * u.kelvin
+    >>> potential_mean = ho.getPotentialExpectation(temperature)
+    >>> potential_stddev = ho.getPotentialStandardDeviation(temperature)
+    
     """
     
     def __init__(self, K=100.0 * units.kilocalories_per_mole / units.angstroms**2, mass=39.948 * units.amu):
@@ -249,6 +292,39 @@ class HarmonicOscillator(TestSystem):
         
         self.K, self.mass = K, mass
         self.system, self.positions = system, positions
+
+
+    def getPotentialExpectation(self, temperature):
+        """Return the expectation of the potential energy, computed analytically or numerically.
+
+        Returns
+        -------
+        
+        potential_mean : simtk.unit.Quantity compatible with simtk.unit.kilojoules_per_mole
+            mean potential energy if implemented, or else None
+        
+        """
+
+        kB = units.BOLTZMANN_CONSTANT_kB * units.AVOGADRO_CONSTANT_NA 
+        kT = kB * temperature 
+        
+        return (3./2.) * kT
+
+    def getPotentialStandardDeviation(self, temperature):
+        """Return the standard deviation of the potential energy, computed analytically or numerically.
+
+        Returns
+        -------
+        
+        potential_stddev : simtk.unit.Quantity compatible with simtk.unit.kilojoules_per_mole
+            potential energy standard deviation if implemented, or else None
+        
+        """
+
+        kB = units.BOLTZMANN_CONSTANT_kB * units.AVOGADRO_CONSTANT_NA 
+        kT = kB * temperature 
+        
+        return (3./2.) * kT
 
 class Diatom(TestSystem):
     """Create a free diatomic molecule with a single harmonic bond between the two atoms.
@@ -323,7 +399,6 @@ class Diatom(TestSystem):
 
         self.system, self.positions = system, positions
         self.K, self.r0, self.m1, self.m2, self.constraint, self.use_central_potential = K, r0, m1, m2, constraint, use_central_potential
-
 
 class ConstraintCoupledHarmonicOscillator(TestSystem):
     """Create a pair of particles in 3D harmonic oscillator wells, coupled by a constraint.
