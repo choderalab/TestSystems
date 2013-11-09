@@ -51,6 +51,7 @@ import os.path
 import numpy as np
 import numpy.random
 import math
+import copy
 
 import simtk
 import simtk.openmm as mm
@@ -84,143 +85,85 @@ class TestSystem(object):
     
     Retrieve System object.
 
-    >>> system = testsystem.getSystem()
+    >>> system = testsystem.system
 
     Retrieve the positions.
     
-    >>> positions = testsystem.getPositions()
+    >>> positions = testsystem.positions
     
 
     """
-    def __init__(self):
+    def __init__(self, temperature=None, pressure=None):
+        """Abstract base class for test system.
 
-        # Create an empty system object.
-        system = mm.System()
+        Parameters
+        ----------
+
+        temperature : simtk.unit.Quantity, optional, units compatible with simtk.unit.kelvin
+            The temperature of the system.
+
+        pressure : simtk.unit.Quantity, optional, units compatible with simtk.unit.atmospheres
+            The pressure of the system.
+
+        """
         
-        # Store the system.
-        self.system = system
+        # Create an empty system object.
+        self._system = mm.System()
 
         # Store positions.
-        self.positions = units.Quantity(np.zeros([0,3], np.float), units.nanometers)
+        self._positions = units.Quantity(np.zeros([0,3], np.float), units.nanometers)
 
-    def getSystem(self):
-        """Retrieve the System object.
-
-        Returns
-        -------
+        # Store thermodynamic parameters.
+        self._temperature = temperature
+        self._pressure = pressure
         
-        system : simtk.openmm.System
-            OpenMM System object        
+        return
 
-        """
-        return self.system
+    @property
+    def system(self):
+        """The simtk.openmm.System object corresponding to the test system."""
+        return copy.deepcopy(self._system)
 
-    def getPositions(self):
-        """Retrieve the positions associated with this System.
-        
-        Returns
-        -------
-        
-        positions : simtk.unit.Quantity wrapped (natoms x 3) numpy array compatible with simtk.unit.nanometers
-            positions of particles in the system
+    @system.setter
+    def system(self, value):
+        self._system = value
 
-        """
-        
-        return self.positions
+    @system.deleter
+    def system(self):
+        del self._system
 
-    def getPotentialExpectation(self, temperature, pressure=None):
-        """Return the expectation of the potential energy in the NVT or NPT ensemble, computed analytically or numerically.
+    @property
+    def positions(self):
+        """The simtk.unit.Quantity object containing the particle positions, with units compatible with simtk.unit.nanometers."""
+        return copy.deepcopy(self._positions)
 
-        Parameters
-        ----------
+    @positions.setter
+    def positions(self, value):
+        self._positions = value
+    
+    @positions.deleter
+    def positions(self):
+        del self._positions
 
-        temperature : simtk.unit.Quantity compatible with simtk.unit.kelvin
-            The temperature at which the expectation is to be computed.
-
-        pressure : simtk.unit.Quantity compatible with simtk.unit.atmospheres, optional
-            The pressure at which the expectation is to be computed.
-        
-        Returns
-        -------
-        
-        potential_mean : simtk.unit.Quantity compatible with simtk.unit.kilojoules_per_mole
-            The potential energy expectation, or else None if not implemented.
-        
-        """
+    @property
+    def potential_expectation(self):
+        """The analytical expectation of the potential energy in the NVT or NPT ensemble; simtk.unit.Quantity compatible with simtk.unit.kilojoules_per_mole, or None if not implemented."""
         return None
 
-    def getPotentialStandardDeviation(self, temperature, pressure=None):
-        """Return the standard deviation of the potential energy in the NVT or NPT ensemble, computed analytically or numerically.
-
-        Parameters
-        ----------
-
-        temperature : simtk.unit.Quantity compatible with simtk.unit.kelvin
-            The temperature at which the expectation is to be computed.
-
-        pressure : simtk.unit.Quantity compatible with simtk.unit.atmospheres, optional
-            The pressure at which the expectation is to be computed.
-
-        Returns
-        -------
-        
-        potential_stddev : simtk.unit.Quantity compatible with simtk.unit.kilojoules_per_mole
-            The potential energy standard deviation, or else None if not implemented.
-        
-        """
+    @property
+    def potential_standard_deviation(self):
+        """The analytical standard deviation of the potential energy in the NVT or NPT ensemble; simtk.unit.Quantity compatible with simtk.unit.kilojoules_per_mole, or None if not implemented."""
         return None
 
-    def getVolumeExpectation(self, temperature, pressure):
-        """Return the expectation of the volume, computed analytically or numerically.
+    @property
+    def volume_expectation(self):
+        """The analyticalexpectation of the volume in the NPT ensemble (if applicable); simtk.unit.Quantity compatible with simtk.unit.nanometers**3, or None if not implemneted."""
+        return None
 
-        Parameters
-        ----------
-
-        temperature : simtk.unit.Quantity compatible with simtk.unit.kelvin
-            The temperature at which the expectation is to be computed.
-
-        pressure : simtk.unit.Quantity compatible with simtk.unit.atmospheres
-            The pressure at which the expectation is to be computed.
-
-        Returns
-        -------
-        
-        volume_mean : simtk.unit.Quantity compatible with simtk.unit.nanometers**3
-            The volume expectation, or else None if not implemented.
-            
-        Notes
-        -----
-
-        This property is only sensible to implement for periodic systems.
-
-        """
-        raise NotImplementedException()
-
-    def getVolumeStandardDeviaton(self, temperature, pressure):
-        """Return the standard deviation of the volume, computed analytically or numerically.
-
-        Parameters
-        ----------
-
-        temperature : simtk.unit.Quantity compatible with simtk.unit.kelvin
-            The temperature at which the expectation is to be computed.
-
-        pressure : simtk.unit.Quantity compatible with simtk.unit.atmospheres
-            The pressure at which the expectation is to be computed.
-
-        Returns
-        -------
-        
-        volume_stddev : simtk.unit.Quantity compatible with simtk.unit.nanometers**3
-            The volume standard deviation, or else None if not implemented.
-        
-        Note
-        ----
-            
-        This property is only sensible to implement for periodic systems.
-
-        """
-        return None        
+    @property
+    def volume_standard_deivation(self):
+        """The analytical standard deviation of the volume in the NPT ensemble (if applicable); simtk.unit.Quantity compatible with simtk.unit.nanometers**3, or None if not implemneted."""        
+        return None
 
 class HarmonicOscillator(TestSystem):
     """Create a 3D harmonic oscillator, with a single particle confined in an isotropic harmonic well.
