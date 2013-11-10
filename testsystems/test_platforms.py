@@ -196,6 +196,17 @@ if __name__ == "__main__":
                     tests_passed += 1
                 else:
                     tests_failed += 1
+
+                    # Write XML files of failed tests to aid in debugging.
+                    print "Writing failed test system to '%s'.{system,state}.xml ..." % testsystem.name
+                    [system_xml, state_xml] = testsystem.serialize()
+                    xml_file = open(testsystem.name + '.system.xml', 'w')
+                    xml_file.write(system_xml)
+                    xml_file.close()
+                    xml_file = open(testsystem.name + '.state.xml', 'w')
+                    xml_file.write(state_xml)
+                    xml_file.close()
+                    
             except Exception as e:
                 print e
 

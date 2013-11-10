@@ -141,7 +141,10 @@ class TestSystem(object):
     Retrieve the positions.
     
     >>> positions = testsystem.positions
-    
+
+    Serialize system and positions to XML (to aid in debugging).
+
+    >>> [system_xml, positions_xml] = testsystem.serialize()
 
     """
     def __init__(self, temperature=None, pressure=None):
@@ -200,6 +203,42 @@ class TestSystem(object):
     def analytical_properties(self):
         """A list of available analytical properties, accessible via 'get_propertyname(thermodynamic_state)' calls."""
         return [ method[4:] for method in dir(self) if (method[0:4]=='get_') ]
+
+    def serialize(self):
+        """Return the System and positions in serialized XML form.
+
+        Returns
+        -------
+        
+        system_xml : str
+            Serialized XML form of System object.
+            
+        state_xml : str
+            Serialized XML form of State object containing particle positions.
+
+        """
+
+        from simtk.openmm import XmlSerializer
+        
+        # Serialize System.
+        system_xml = XmlSerializer.serialize(self._system)
+
+        # Serialize positions via State.
+        platform = mm.Platform.getPlatformByName('Reference')
+        integrator = mm.VerletIntegrator(1.0 * units.femtoseconds)
+        context = mm.Context(self._system, integrator, platform)
+        context.setPositions(self._positions)
+        state = context.getState(getPositions=True)
+        del context, integrator
+
+        state_xml = XmlSerializer.serialize(state)
+
+        return [system_xml, state_xml]
+
+    @property
+    def name(self):
+        """The name of the test system."""
+        return self.__class__.__name__
 
 #=============================================================================================
 # 3D harmonic oscillator
