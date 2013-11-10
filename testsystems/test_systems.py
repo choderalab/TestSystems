@@ -1232,7 +1232,7 @@ class IdealGas(TestSystem):
             return volume
 
         N = self._system.getNumParticles()
-        return ((N+1) * units.BOLTZMANN_CONSTANT_kB * state.temperature / state.pressure).in_units_of(u.nanometers**3)
+        return ((N+1) * units.BOLTZMANN_CONSTANT_kB * state.temperature / state.pressure).in_units_of(units.nanometers**3)
         
     def get_volume_standard_deviation(self, state):
         """Return the standard deviation of the volume, computed analytically.
@@ -1260,7 +1260,7 @@ class IdealGas(TestSystem):
             return 0.0 * units.nanometers**3
 
         N = self._system.getNumParticles()
-        return (numpy.sqrt(N+1) * units.BOLTZMANN_CONSTANT_kB * state.temperature / state.pressure).in_units_of(u.nanometers**3)
+        return (numpy.sqrt(N+1) * units.BOLTZMANN_CONSTANT_kB * state.temperature / state.pressure).in_units_of(units.nanometers**3)
     
 #=============================================================================================
 # Water box
