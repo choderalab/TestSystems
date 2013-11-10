@@ -144,7 +144,7 @@ class TestSystem(object):
 
     Serialize system and positions to XML (to aid in debugging).
 
-    >>> [system_xml, positions_xml] = testsystem.serialize()
+    >>> (system_xml, positions_xml) = testsystem.serialize()
 
     """
     def __init__(self, temperature=None, pressure=None):
@@ -218,26 +218,25 @@ class TestSystem(object):
 
         """
 
-        # Cannot serialize the State of a system with no particles.
-        if self._system.getNumParticles() == 0:
-            return None
-
         from simtk.openmm import XmlSerializer
         
         # Serialize System.
         system_xml = XmlSerializer.serialize(self._system)
 
         # Serialize positions via State.
-        platform = mm.Platform.getPlatformByName('Reference')
-        integrator = mm.VerletIntegrator(1.0 * units.femtoseconds)
-        context = mm.Context(self._system, integrator, platform)
-        context.setPositions(self._positions)
-        state = context.getState(getPositions=True)
-        del context, integrator
+        if self._system.getNumParticles() == 0:
+        # Cannot serialize the State of a system with no particles.
+            state_xml = None
+        else:
+            platform = mm.Platform.getPlatformByName('Reference')
+            integrator = mm.VerletIntegrator(1.0 * units.femtoseconds)
+            context = mm.Context(self._system, integrator, platform)
+            context.setPositions(self._positions)
+            state = context.getState(getPositions=True)
+            del context, integrator
+            state_xml = XmlSerializer.serialize(state)
 
-        state_xml = XmlSerializer.serialize(state)
-
-        return [system_xml, state_xml]
+        return (system_xml, state_xml)
 
     @property
     def name(self):
