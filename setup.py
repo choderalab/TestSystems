@@ -1,4 +1,4 @@
-"""Test systems for Yank
+"""Test systems for OpenMM
 
 """
 
