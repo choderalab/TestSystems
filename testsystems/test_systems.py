@@ -48,6 +48,7 @@ TODO
 
 import os
 import os.path
+import sys
 import numpy as np
 import numpy.random
 import math
@@ -57,6 +58,56 @@ import simtk
 import simtk.openmm as mm
 import simtk.unit as units
 import simtk.openmm.app as app
+
+kB = units.BOLTZMANN_CONSTANT_kB * units.AVOGADRO_CONSTANT_NA 
+
+#=============================================================================================
+# Thermodynamic state description
+#=============================================================================================
+
+class ThermodynamicState(object):
+    """
+    Data specifying a thermodynamic state obeying Boltzmann statistics.
+
+    EXAMPLES
+
+    Specify an NVT state for a water box at 298 K.
+
+    >>> import simtk.unit as u
+    >>> state = ThermodynamicState(temperature=298.0*u.kelvin)
+
+    Specify an NPT state at 298 K and 1 atm pressure.
+
+    >>> state = ThermodynamicState(temperature=298.0*u.kelvin, pressure=1.0*u.atmospheres)
+    
+    Note that the pressure is only relevant for periodic systems.
+
+    """
+    
+    def __init__(self, temperature=None, pressure=None):
+        """
+        Initialize the thermodynamic state.
+
+        OPTIONAL ARGUMENTS
+
+        system (simtk.openmm.System) - a System object describing the potential energy function for the system (default: None)
+        temperature (simtk.unit.Quantity compatible with 'kelvin') - the temperature for a system with constant temperature (default: None)
+        pressure (simtk.unit.Quantity compatible with 'atmospheres') - the pressure for constant-pressure systems (default: None)
+
+        mm (simtk.openmm API) - OpenMM API implementation to use
+        cache_context (boolean) - if True, will try to cache Context objects
+
+        """
+
+        # Initialize.
+        self.temperature = temperature
+        self.pressure = pressure
+
+        return
+
+#=============================================================================================
+# Abstract base class for test systems
+#=============================================================================================
 
 class TestSystem(object):
     """Abstract base class for test systems, demonstrating how to implement a test system.
@@ -146,24 +197,13 @@ class TestSystem(object):
         del self._positions
 
     @property
-    def potential_expectation(self):
-        """The analytical expectation of the potential energy in the NVT or NPT ensemble; simtk.unit.Quantity compatible with simtk.unit.kilojoules_per_mole, or None if not implemented."""
-        return None
+    def analytical_properties(self):
+        """A list of available analytical properties, accessible via 'get_propertyname(thermodynamic_state)' calls."""
+        return [ method[4:] for method in dir(self) if (method[0:4]=='get_') ]
 
-    @property
-    def potential_standard_deviation(self):
-        """The analytical standard deviation of the potential energy in the NVT or NPT ensemble; simtk.unit.Quantity compatible with simtk.unit.kilojoules_per_mole, or None if not implemented."""
-        return None
-
-    @property
-    def volume_expectation(self):
-        """The analyticalexpectation of the volume in the NPT ensemble (if applicable); simtk.unit.Quantity compatible with simtk.unit.nanometers**3, or None if not implemneted."""
-        return None
-
-    @property
-    def volume_standard_deivation(self):
-        """The analytical standard deviation of the volume in the NPT ensemble (if applicable); simtk.unit.Quantity compatible with simtk.unit.nanometers**3, or None if not implemneted."""        
-        return None
+#=============================================================================================
+# 3D harmonic oscillator
+#=============================================================================================
 
 class HarmonicOscillator(TestSystem):
     """Create a 3D harmonic oscillator, with a single particle confined in an isotropic harmonic well.
@@ -207,16 +247,23 @@ class HarmonicOscillator(TestSystem):
     >>> ho = HarmonicOscillator(K=K, mass=mass)
     >>> (system, positions) = ho.system, ho.positions
 
+    Get a list of the available analytically-computed properties.
+
+    >>> print ho.analytical_properties
+    ['potential_expectation', 'potential_standard_deviation']
+
     Compute the potential expectation and standard deviation
 
     >>> import simtk.unit as u
-    >>> temperature = 298 * u.kelvin
-    >>> potential_mean = ho.getPotentialExpectation(temperature)
-    >>> potential_stddev = ho.getPotentialStandardDeviation(temperature)
+    >>> thermodynamic_state = ThermodynamicState(temperature=298.0*u.kelvin)
+    >>> potential_mean = ho.get_potential_expectation(thermodynamic_state)
+    >>> potential_stddev = ho.get_potential_standard_deviation(thermodynamic_state)
     
     """
     
-    def __init__(self, K=100.0 * units.kilocalories_per_mole / units.angstroms**2, mass=39.948 * units.amu):
+    def __init__(self, K=100.0 * units.kilocalories_per_mole / units.angstroms**2, mass=39.948 * units.amu, **kwargs):
+
+        TestSystem.__init__(self, kwargs)
 
         # Create an empty system object.
         system = mm.System()
@@ -235,26 +282,37 @@ class HarmonicOscillator(TestSystem):
         
         self.K, self.mass = K, mass
         self.system, self.positions = system, positions
+        
+        # Number of degrees of freedom.
+        self.ndof = 3
 
-
-    def getPotentialExpectation(self, temperature):
+    def get_potential_expectation(self, state):
         """Return the expectation of the potential energy, computed analytically or numerically.
 
+        Arguments
+        ---------
+        
+        state : ThermodynamicState with temperature defined
+            The thermodynamic state at which the property is to be computed.
+        
         Returns
         -------
         
         potential_mean : simtk.unit.Quantity compatible with simtk.unit.kilojoules_per_mole
-            mean potential energy if implemented, or else None
+            The expectation of the potential energy.
         
         """
 
-        kB = units.BOLTZMANN_CONSTANT_kB * units.AVOGADRO_CONSTANT_NA 
-        kT = kB * temperature 
+        return (3./2.) * kB * state.temperature
         
-        return (3./2.) * kT
-
-    def getPotentialStandardDeviation(self, temperature):
+    def get_potential_standard_deviation(self, state):
         """Return the standard deviation of the potential energy, computed analytically or numerically.
+
+        Arguments
+        ---------
+        
+        state : ThermodynamicState with temperature defined
+            The thermodynamic state at which the property is to be computed.
 
         Returns
         -------
@@ -264,10 +322,11 @@ class HarmonicOscillator(TestSystem):
         
         """
 
-        kB = units.BOLTZMANN_CONSTANT_kB * units.AVOGADRO_CONSTANT_NA 
-        kT = kB * temperature 
-        
-        return (3./2.) * kT
+        return (3./2.) * kB * state.temperature
+
+#=============================================================================================
+# Diatomi molecule
+#=============================================================================================
 
 class Diatom(TestSystem):
     """Create a free diatomic molecule with a single harmonic bond between the two atoms.
@@ -342,6 +401,32 @@ class Diatom(TestSystem):
 
         self.system, self.positions = system, positions
         self.K, self.r0, self.m1, self.m2, self.constraint, self.use_central_potential = K, r0, m1, m2, constraint, use_central_potential
+        
+        # Store number of degrees of freedom.
+        self.ndof = 6 - 1*constraint
+
+    def get_potential_expectation(self, state):
+        """Return the expectation of the potential energy, computed analytically or numerically.
+
+        Arguments
+        ---------
+        
+        state : ThermodynamicState with temperature defined
+            The thermodynamic state at which the property is to be computed.
+        
+        Returns
+        -------
+        
+        potential_mean : simtk.unit.Quantity compatible with simtk.unit.kilojoules_per_mole
+            The expectation of the potential energy.
+        
+        """
+
+        return (self.ndof/2.) * kB * state.temperature
+        
+#=============================================================================================
+# Constraint-coupled harmonic oscillator
+#=============================================================================================
 
 class ConstraintCoupledHarmonicOscillator(TestSystem):
     """Create a pair of particles in 3D harmonic oscillator wells, coupled by a constraint.
@@ -415,6 +500,9 @@ class ConstraintCoupledHarmonicOscillator(TestSystem):
         self.system, self.positions = system, positions
         self.K, self.d, self.mass = K, d, mass
 
+#=============================================================================================
+# Harmonic oscillator array
+#=============================================================================================
 
 class HarmonicOscillatorArray(TestSystem):
     """Create a 1D array of noninteracting particles in 3D harmonic oscillator wells.
@@ -482,7 +570,49 @@ class HarmonicOscillatorArray(TestSystem):
 
         self.system, self.positions = system, positions
         self.K, self.d, self.mass, self.N = K, d, mass, N
+        self.ndof = 3*N
 
+    def get_potential_expectation(self, state):
+        """Return the expectation of the potential energy, computed analytically or numerically.
+
+        Arguments
+        ---------
+        
+        state : ThermodynamicState with temperature defined
+            The thermodynamic state at which the property is to be computed.
+        
+        Returns
+        -------
+        
+        potential_mean : simtk.unit.Quantity compatible with simtk.unit.kilojoules_per_mole
+            The expectation of the potential energy.
+        
+        """
+
+        return (self.ndof/2.) * kB * state.temperature
+        
+    def get_potential_standard_deviation(self, state):
+        """Return the standard deviation of the potential energy, computed analytically or numerically.
+
+        Arguments
+        ---------
+        
+        state : ThermodynamicState with temperature defined
+            The thermodynamic state at which the property is to be computed.
+
+        Returns
+        -------
+        
+        potential_stddev : simtk.unit.Quantity compatible with simtk.unit.kilojoules_per_mole
+            potential energy standard deviation if implemented, or else None
+        
+        """
+
+        return (self.ndof/2.) * kB * state.temperature
+
+#=============================================================================================
+# Sodium chloride FCC crystal.
+#=============================================================================================
 
 class SodiumChlorideCrystal(TestSystem):
     """Create an FCC crystal of sodium chloride.
@@ -561,6 +691,9 @@ class SodiumChlorideCrystal(TestSystem):
            
         self.system, self.positions = system, positions
 
+#=============================================================================================
+# Lennard-Jones cluster
+#=============================================================================================
 
 class LennardJonesCluster(TestSystem):
     """Create a non-periodic rectilinear grid of Lennard-Jones particles in a harmonic restraining potential.
@@ -642,6 +775,9 @@ class LennardJonesCluster(TestSystem):
 
         self.system, self.positions = system, positions
 
+#=============================================================================================
+# Lennard-Jones fluid
+#=============================================================================================
 
 class LennardJonesFluid(TestSystem):
     """Create a periodic rectilinear grid of Lennard-Jones particles.    
@@ -774,6 +910,9 @@ class LennardJonesFluid(TestSystem):
 
         self.system, self.positions = system, positions
 
+#=============================================================================================
+# Custom Lennard-Jones fluid
+#=============================================================================================
 
 class CustomLennardJonesFluid(TestSystem):
     """Create a periodic rectilinear grid of Lennard-Jones particled, but implemented via CustomBondForce rather than NonbondedForce.
@@ -922,6 +1061,9 @@ class CustomLennardJonesFluid(TestSystem):
         
         self.system, self.positions = system, positions
 
+#=============================================================================================
+# Ideal gas
+#=============================================================================================
 
 class IdealGas(TestSystem):
     """Create an 'ideal gas' of noninteracting particles in a periodic box.
@@ -984,7 +1126,145 @@ class IdealGas(TestSystem):
         np.random.set_state(state)
 
         self.system, self.positions = system, positions
+        self.ndof = 3 * nparticles
 
+    def get_potential_expectation(self, state):
+        """Return the expectation of the potential energy, computed analytically or numerically.
+
+        Arguments
+        ---------
+        
+        state : ThermodynamicState with temperature defined
+            The thermodynamic state at which the property is to be computed.
+        
+        Returns
+        -------
+        
+        potential_mean : simtk.unit.Quantity compatible with simtk.unit.kilojoules_per_mole
+            The expectation of the potential energy.
+        
+        """
+
+        return 0.0 * units.kilojoules_per_mole
+        
+    def get_potential_standard_deviation(self, state):
+        """Return the standard deviation of the potential energy, computed analytically or numerically.
+
+        Arguments
+        ---------
+        
+        state : ThermodynamicState with temperature defined
+            The thermodynamic state at which the property is to be computed.
+
+        Returns
+        -------
+        
+        potential_stddev : simtk.unit.Quantity compatible with simtk.unit.kilojoules_per_mole
+            potential energy standard deviation if implemented, or else None
+        
+        """
+
+        return 0.0 * units.kilojoules_per_mole
+
+    def get_kinetic_expectation(self, state):
+        """Return the expectation of the kinetic energy, computed analytically or numerically.
+
+        Arguments
+        ---------
+        
+        state : ThermodynamicState with temperature defined
+            The thermodynamic state at which the property is to be computed.
+        
+        Returns
+        -------
+        
+        potential_mean : simtk.unit.Quantity compatible with simtk.unit.kilojoules_per_mole
+            The expectation of the potential energy.
+        
+        """
+
+        return (3./2.) * kB * state.temperature 
+        
+    def get_kinetic_standard_deviation(self, state):
+        """Return the standard deviation of the kinetic energy, computed analytically or numerically.
+
+        Arguments
+        ---------
+        
+        state : ThermodynamicState with temperature defined
+            The thermodynamic state at which the property is to be computed.
+
+        Returns
+        -------
+        
+        potential_stddev : simtk.unit.Quantity compatible with simtk.unit.kilojoules_per_mole
+            potential energy standard deviation if implemented, or else None
+        
+        """
+
+        return (3./2.) * kB * state.temperature 
+
+    def get_volume_expectation(self, state):
+        """Return the expectation of the volume, computed analytically.
+
+        Arguments
+        ---------
+        
+        state : ThermodynamicState with temperature and pressure defined
+            The thermodynamic state at which the property is to be computed.
+        
+        Returns
+        -------
+        
+        volume_mean : simtk.unit.Quantity compatible with simtk.unit.nanometers**3
+            The expectation of the volume at equilibrium.
+        
+        Notes
+        -----
+        
+        The true mean volume is used, rather than the large-N limit.
+
+        """
+        
+        if not state.pressure:
+            box_vectors = self.system.getDefaultPeriodicBoxVectors()
+            volume = box_vectors[0][0] * box_vectors[1][1] * box_vectors[2][2] 
+            return volume
+
+        N = self._system.getNumParticles()
+        return ((N+1) * units.BOLTZMANN_CONSTANT_kB * state.temperature / state.pressure).in_units_of(u.nanometers**3)
+        
+    def get_volume_standard_deviation(self, state):
+        """Return the standard deviation of the volume, computed analytically.
+
+        Arguments
+        ---------
+        
+        state : ThermodynamicState with temperature and pressure defined
+            The thermodynamic state at which the property is to be computed.
+
+        Returns
+        -------
+        
+        volume_stddev : simtk.unit.Quantity compatible with simtk.unit.nanometers**3
+            The standard deviation of the volume at equilibrium.
+        
+        Notes
+        -----
+        
+        The true mean volume is used, rather than the large-N limit.
+
+        """
+        
+        if not state.pressure:
+            return 0.0 * units.nanometers**3
+
+        N = self._system.getNumParticles()
+        return (numpy.sqrt(N+1) * units.BOLTZMANN_CONSTANT_kB * state.temperature / state.pressure).in_units_of(u.nanometers**3)
+    
+#=============================================================================================
+# Water box
+#=============================================================================================
 
 class WaterBox(TestSystem):
     """Create a test system containing a periodic box of TIP3P water.
@@ -1175,6 +1455,9 @@ class WaterBox(TestSystem):
 
         self.system, self.positions = system, positions
 
+#=============================================================================================
+# Alanine dipeptide in implicit solvent.
+#=============================================================================================
 
 class AlanineDipeptideImplicit(TestSystem):
     """Alanine dipeptide ff96 in OBC GBSA implicit solvent.
@@ -1209,6 +1492,9 @@ class AlanineDipeptideImplicit(TestSystem):
 
         self.system, self.positions = system, positions
 
+#=============================================================================================
+# Alanine dipeptide in explicit solvent
+#=============================================================================================
 
 class AlanineDipeptideExplicit(TestSystem):
     """Alanine dipeptide ff96 in TIP3P explicit solvent with PME electrostatics.
@@ -1248,6 +1534,9 @@ class AlanineDipeptideExplicit(TestSystem):
         
         self.system, self.positions = system, positions
 
+#=============================================================================================
+# T4 lysozyme L99A mutant with p-xylene ligand.
+#=============================================================================================
 
 class LysozymeImplicit(TestSystem):
     """T4 lysozyme L99A (AMBER ff96) with p-xylene ligand (GAFF + AM1-BCC) in implicit OBC GBSA solvent.
@@ -1311,6 +1600,9 @@ class SrcImplicit(TestSystem):
         
         self.system, self.positions = system, positions
 
+#=============================================================================================
+# Src kinase in explicit solvent.
+#=============================================================================================
 
 class SrcExplicit(TestSystem):
     """Src kinase (AMBER 99sb-ildn) in explicit TIP3P solvent.
@@ -1343,6 +1635,9 @@ class SrcExplicit(TestSystem):
         
         self.system, self.positions = system, positions
 
+#=============================================================================================
+# Methanol box.
+#=============================================================================================
 
 class MethanolBox(TestSystem):
     """Methanol box.
@@ -1470,6 +1765,9 @@ class MolecularIdealGas(TestSystem):
         
         self.system, self.positions = system, positions
 
+#=============================================================================================
+# System of particles with CustomGBForce
+#=============================================================================================
 
 class CustomGBForceSystem(TestSystem):
     """A system of particles with a CustomGBForce.
@@ -1579,7 +1877,22 @@ class CustomGBForceSystem(TestSystem):
 #=============================================================================================
 
 if __name__ == "__main__":
+    # Run doctests.
     import doctest
-
     doctest.testmod()    
+    
+    # Make sure all advertised analytical properties can be computed.
+    import simtk.unit as u
+    state = ThermodynamicState(temperature=300.0*u.kelvin, pressure=1.0*u.atmosphere)
+    testsystem_classes = [cls for cls in vars()['TestSystem'].__subclasses__()]
+    print "Testing analytical property computation:"
+    for testsystem_class in testsystem_classes:
+        class_name = testsystem_class.__name__
+        testsystem = testsystem_class()
+        property_list = testsystem.analytical_properties
+        if len(property_list) > 0:
+            for property_name in property_list:
+                method = getattr(testsystem, 'get_' + property_name)
+                print "%32s . %32s : %32s" % (class_name, property_name, str(method(state)))
+
 
