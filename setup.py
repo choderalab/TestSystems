@@ -49,14 +49,14 @@ Operating System :: MacOS
 
 extensions = []
 
-setup(name='repex',
+setup(name='testsystems',
       author='Kyle A. Beauchamp',
       author_email='kyleabeauchamp@gmail.com',
       description=DOCLINES[0],
       long_description="\n".join(DOCLINES[2:]),
       version=__version__,
       license='GPLv3+',
-      url='http://github.com/ChoderaLab/repex',
+      url='http://github.com/ChoderaLab/openmm-testsystems',
       platforms=['Linux', 'Mac OS-X', 'Unix'],
       classifiers=CLASSIFIERS.splitlines(),
       packages=["testsystems"],
@@ -65,6 +65,6 @@ setup(name='repex',
       zip_safe=False,
       scripts=[],
       ext_modules=extensions,
-      package_data={'testsystems.data': ['data/*']},
+      package_data={'testsystems': ['data/*/*']},  # Install all data directories of the form testsystems/data/X/
       **setup_kwargs
       )
