@@ -1,4 +1,4 @@
-"""Test systems for OpenMM
+"""Test systems for OpenMM and Yank
 
 """
 
@@ -49,22 +49,22 @@ Operating System :: MacOS
 
 extensions = []
 
-setup(name='testsystems',
+setup(name='yanktools',
       author='Kyle A. Beauchamp',
       author_email='kyleabeauchamp@gmail.com',
       description=DOCLINES[0],
       long_description="\n".join(DOCLINES[2:]),
       version=__version__,
       license='GPLv3+',
-      url='http://github.com/ChoderaLab/openmm-testsystems',
+      url='http://github.com/ChoderaLab/YankTools',
       platforms=['Linux', 'Mac OS-X', 'Unix'],
       classifiers=CLASSIFIERS.splitlines(),
-      packages=["testsystems"],
+      packages=["yanktools"],
       package_dir={'mdtraj': 'MDTraj', 'mdtraj.scripts': 'scripts'},
       install_requires=['numpy', 'nose', 'nose-exclude'],
       zip_safe=False,
       scripts=[],
       ext_modules=extensions,
-      package_data={'testsystems': ['data/*/*']},  # Install all data directories of the form testsystems/data/X/
+      package_data={'yanktools': ['data/*/*']},  # Install all data directories of the form testsystems/data/X/
       **setup_kwargs
       )

@@ -1,5 +1,5 @@
-OpenMM Test Systems
-===========
+YankTools
+=========
 
 This repository contains a suite of molecular systems that can be used
 for the testing of various molecular mechanics related software.  The
