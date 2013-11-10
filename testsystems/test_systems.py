@@ -218,6 +218,10 @@ class TestSystem(object):
 
         """
 
+        # Cannot serialize the State of a system with no particles.
+        if self._system.getNumParticles() == 0:
+            return None
+
         from simtk.openmm import XmlSerializer
         
         # Serialize System.
@@ -1543,6 +1547,8 @@ class AlanineDipeptideExplicit(TestSystem):
     flexibleConstraints : bool, optional, default=True
     shake : string, optional, default="h-bonds"
     nonbondedCutoff : Quantity, optional, default=9.0 * units.angstroms
+    use_dispersion_correction : bool, optional, default=True
+        If True, the long-range disperson correction will be used.
     
     Examples
     --------
@@ -1551,7 +1557,7 @@ class AlanineDipeptideExplicit(TestSystem):
     >>> (system, positions) = alanine.system, alanine.positions
     """
 
-    def __init__(self, flexibleConstraints=True, shake='h-bonds', nonbondedCutoff=9.0 * units.angstroms):       
+    def __init__(self, flexibleConstraints=True, shake='h-bonds', nonbondedCutoff=9.0 * units.angstroms, use_dispersion_correction=True):
 
         # Determine prmtop and crd filenames in test directory.
         # TODO: This will need to be revised in order to be able to find the test systems.
@@ -1562,6 +1568,10 @@ class AlanineDipeptideExplicit(TestSystem):
         
         prmtop = app.AmberPrmtopFile(prmtop_filename)
         system = prmtop.createSystem(constraints=app.HBonds, nonbondedMethod=app.PME, rigidWater=True, nonbondedCutoff=0.9*units.nanometer)
+
+        # Set dispersion correction use.
+        forces = { system.getForce(index).__class__.__name__ : system.getForce(index) for index in range(system.getNumForces()) }
+        forces['NonbondedForce'].setUseDispersionCorrection(use_dispersion_correction)
 
         # Read positions.
         inpcrd = app.AmberInpcrdFile(crd_filename, loadBoxVectors=True)
