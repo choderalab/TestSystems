@@ -1,7 +1,7 @@
 #!/usr/local/bin/env python
 
 """
-Module to generate Systems and coordinates for simple reference molecular systems for testing.
+Module to generate Systems and positions for simple reference molecular systems for testing.
 
 DESCRIPTION
 
@@ -16,7 +16,7 @@ Create a 3D harmonic oscillator.
 
 >>> import test_systems
 >>> ho = test_systems.HarmonicOscillator()
->>> system, coordinates = ho.system, ho.coordinates
+>>> system, positions = ho.system, ho.positions
 
 See list of methods for a complete list of provided test systems.
 
@@ -48,17 +48,207 @@ TODO
 
 import os
 import os.path
+import sys
 import numpy as np
 import numpy.random
 import math
+import copy
 
 import simtk
 import simtk.openmm as mm
 import simtk.unit as units
 import simtk.openmm.app as app
 
+kB = units.BOLTZMANN_CONSTANT_kB * units.AVOGADRO_CONSTANT_NA 
 
-class HarmonicOscillator(object):
+#=============================================================================================
+# Thermodynamic state description
+#=============================================================================================
+
+class ThermodynamicState(object):
+    """
+    Data specifying a thermodynamic state obeying Boltzmann statistics.
+
+    EXAMPLES
+
+    Specify an NVT state for a water box at 298 K.
+
+    >>> import simtk.unit as u
+    >>> state = ThermodynamicState(temperature=298.0*u.kelvin)
+
+    Specify an NPT state at 298 K and 1 atm pressure.
+
+    >>> state = ThermodynamicState(temperature=298.0*u.kelvin, pressure=1.0*u.atmospheres)
+    
+    Note that the pressure is only relevant for periodic systems.
+
+    """
+    
+    def __init__(self, temperature=None, pressure=None):
+        """
+        Initialize the thermodynamic state.
+
+        OPTIONAL ARGUMENTS
+
+        system (simtk.openmm.System) - a System object describing the potential energy function for the system (default: None)
+        temperature (simtk.unit.Quantity compatible with 'kelvin') - the temperature for a system with constant temperature (default: None)
+        pressure (simtk.unit.Quantity compatible with 'atmospheres') - the pressure for constant-pressure systems (default: None)
+
+        mm (simtk.openmm API) - OpenMM API implementation to use
+        cache_context (boolean) - if True, will try to cache Context objects
+
+        """
+
+        # Initialize.
+        self.temperature = temperature
+        self.pressure = pressure
+
+        return
+
+#=============================================================================================
+# Abstract base class for test systems
+#=============================================================================================
+
+class TestSystem(object):
+    """Abstract base class for test systems, demonstrating how to implement a test system.
+
+    Parameters
+    ----------
+    
+    Attributes
+    ----------
+    system : simtk.openmm.System
+        Openmm system with the harmonic oscillator
+    positions : list
+        positions of harmonic oscillator
+
+    Notes
+    -----
+
+    Unimplemented methods will default to the base class methods, which raise a NotImplementedException.
+
+    Examples
+    --------
+
+    Create a test system.
+
+    >>> testsystem = TestSystem()
+    
+    Retrieve System object.
+
+    >>> system = testsystem.system
+
+    Retrieve the positions.
+    
+    >>> positions = testsystem.positions
+
+    Serialize system and positions to XML (to aid in debugging).
+
+    >>> [system_xml, positions_xml] = testsystem.serialize()
+
+    """
+    def __init__(self, temperature=None, pressure=None):
+        """Abstract base class for test system.
+
+        Parameters
+        ----------
+
+        temperature : simtk.unit.Quantity, optional, units compatible with simtk.unit.kelvin
+            The temperature of the system.
+
+        pressure : simtk.unit.Quantity, optional, units compatible with simtk.unit.atmospheres
+            The pressure of the system.
+
+        """
+        
+        # Create an empty system object.
+        self._system = mm.System()
+
+        # Store positions.
+        self._positions = units.Quantity(np.zeros([0,3], np.float), units.nanometers)
+
+        # Store thermodynamic parameters.
+        self._temperature = temperature
+        self._pressure = pressure
+        
+        return
+
+    @property
+    def system(self):
+        """The simtk.openmm.System object corresponding to the test system."""
+        return copy.deepcopy(self._system)
+
+    @system.setter
+    def system(self, value):
+        self._system = value
+
+    @system.deleter
+    def system(self):
+        del self._system
+
+    @property
+    def positions(self):
+        """The simtk.unit.Quantity object containing the particle positions, with units compatible with simtk.unit.nanometers."""
+        return copy.deepcopy(self._positions)
+
+    @positions.setter
+    def positions(self, value):
+        self._positions = value
+    
+    @positions.deleter
+    def positions(self):
+        del self._positions
+
+    @property
+    def analytical_properties(self):
+        """A list of available analytical properties, accessible via 'get_propertyname(thermodynamic_state)' calls."""
+        return [ method[4:] for method in dir(self) if (method[0:4]=='get_') ]
+
+    def serialize(self):
+        """Return the System and positions in serialized XML form.
+
+        Returns
+        -------
+        
+        system_xml : str
+            Serialized XML form of System object.
+            
+        state_xml : str
+            Serialized XML form of State object containing particle positions.
+
+        """
+
+        # Cannot serialize the State of a system with no particles.
+        if self._system.getNumParticles() == 0:
+            return None
+
+        from simtk.openmm import XmlSerializer
+        
+        # Serialize System.
+        system_xml = XmlSerializer.serialize(self._system)
+
+        # Serialize positions via State.
+        platform = mm.Platform.getPlatformByName('Reference')
+        integrator = mm.VerletIntegrator(1.0 * units.femtoseconds)
+        context = mm.Context(self._system, integrator, platform)
+        context.setPositions(self._positions)
+        state = context.getState(getPositions=True)
+        del context, integrator
+
+        state_xml = XmlSerializer.serialize(state)
+
+        return [system_xml, state_xml]
+
+    @property
+    def name(self):
+        """The name of the test system."""
+        return self.__class__.__name__
+
+#=============================================================================================
+# 3D harmonic oscillator
+#=============================================================================================
+
+class HarmonicOscillator(TestSystem):
     """Create a 3D harmonic oscillator, with a single particle confined in an isotropic harmonic well.
 
     Parameters
@@ -72,8 +262,8 @@ class HarmonicOscillator(object):
     ----------
     system : simtk.openmm.System
         Openmm system with the harmonic oscillator
-    coordinates : list
-        coordinates of harmonic oscillator
+    positions : list
+        positions of harmonic oscillator
 
     Notes
     -----
@@ -81,23 +271,42 @@ class HarmonicOscillator(object):
     The natural period of a harmonic oscillator is T = sqrt(m/K), so you will want to use an
     integration timestep smaller than ~ T/10.
 
+    The standard deviation in position in each dimension is sigma = (kT / K)^(1/2)
+
+    The expectation and standard deviation of the potential energy of a 3D harmonic oscillator is (3/2)kT.
+
     Examples
     --------
 
-    Create a 3D harmonic oscillator with default parameters.
+    Create a 3D harmonic oscillator with default parameters:
 
     >>> ho = HarmonicOscillator()
-    >>> (system, coordinates) = ho.system, ho.coordinates
+    >>> (system, positions) = ho.system, ho.positions
 
-    Create a harmonic oscillator with specified mass and spring constant.
+    Create a harmonic oscillator with specified mass and spring constant:
 
     >>> mass = 12.0 * units.amu
     >>> K = 1.0 * units.kilocalories_per_mole / units.angstroms**2
     >>> ho = HarmonicOscillator(K=K, mass=mass)
-    >>> (system, coordinates) = ho.system, ho.coordinates
+    >>> (system, positions) = ho.system, ho.positions
+
+    Get a list of the available analytically-computed properties.
+
+    >>> print ho.analytical_properties
+    ['potential_expectation', 'potential_standard_deviation']
+
+    Compute the potential expectation and standard deviation
+
+    >>> import simtk.unit as u
+    >>> thermodynamic_state = ThermodynamicState(temperature=298.0*u.kelvin)
+    >>> potential_mean = ho.get_potential_expectation(thermodynamic_state)
+    >>> potential_stddev = ho.get_potential_standard_deviation(thermodynamic_state)
+    
     """
     
-    def __init__(self, K=100.0 * units.kilocalories_per_mole / units.angstroms**2, mass=39.948 * units.amu):
+    def __init__(self, K=100.0 * units.kilocalories_per_mole / units.angstroms**2, mass=39.948 * units.amu, **kwargs):
+
+        TestSystem.__init__(self, kwargs)
 
         # Create an empty system object.
         system = mm.System()
@@ -105,8 +314,8 @@ class HarmonicOscillator(object):
         # Add the particle to the system.
         system.addParticle(mass)
 
-        # Set the coordinates.
-        coordinates = units.Quantity(np.zeros([1,3], np.float32), units.angstroms)
+        # Set the positions.
+        positions = units.Quantity(np.zeros([1,3], np.float32), units.angstroms)
 
         # Add a restrining potential centered at the origin.
         force = mm.CustomExternalForce('(K/2.0) * (x^2 + y^2 + z^2)')
@@ -115,9 +324,54 @@ class HarmonicOscillator(object):
         system.addForce(force)
         
         self.K, self.mass = K, mass
-        self.system, self.coordinates = system, coordinates
+        self.system, self.positions = system, positions
+        
+        # Number of degrees of freedom.
+        self.ndof = 3
 
-class Diatom(object):
+    def get_potential_expectation(self, state):
+        """Return the expectation of the potential energy, computed analytically or numerically.
+
+        Arguments
+        ---------
+        
+        state : ThermodynamicState with temperature defined
+            The thermodynamic state at which the property is to be computed.
+        
+        Returns
+        -------
+        
+        potential_mean : simtk.unit.Quantity compatible with simtk.unit.kilojoules_per_mole
+            The expectation of the potential energy.
+        
+        """
+
+        return (3./2.) * kB * state.temperature
+        
+    def get_potential_standard_deviation(self, state):
+        """Return the standard deviation of the potential energy, computed analytically or numerically.
+
+        Arguments
+        ---------
+        
+        state : ThermodynamicState with temperature defined
+            The thermodynamic state at which the property is to be computed.
+
+        Returns
+        -------
+        
+        potential_stddev : simtk.unit.Quantity compatible with simtk.unit.kilojoules_per_mole
+            potential energy standard deviation if implemented, or else None
+        
+        """
+
+        return (3./2.) * kB * state.temperature
+
+#=============================================================================================
+# Diatomi molecule
+#=============================================================================================
+
+class Diatom(TestSystem):
     """Create a free diatomic molecule with a single harmonic bond between the two atoms.
 
     Parameters
@@ -148,7 +402,7 @@ class Diatom(object):
     Create a Diatom:
 
     >>> diatom = Diatom()
-    >>> system, coordinates = diatom.system, diatom.coordinates
+    >>> system, positions = diatom.system, diatom.positions
     """
 
     def __init__(self, 
@@ -175,9 +429,9 @@ class Diatom(object):
             # Add constraint between particles.
             system.addConstraint(0, 1, r0)
         
-        # Set the coordinates.
-        coordinates = units.Quantity(np.zeros([2,3], np.float32), units.angstroms)
-        coordinates[1,0] = r0
+        # Set the positions.
+        positions = units.Quantity(np.zeros([2,3], np.float32), units.angstroms)
+        positions[1,0] = r0
 
         if use_central_potential:
             # Add a central restraining potential.
@@ -188,11 +442,36 @@ class Diatom(object):
             force.addParticle(1, [])    
             system.addForce(force)
 
-        self.system, self.coordinates = system, coordinates
+        self.system, self.positions = system, positions
         self.K, self.r0, self.m1, self.m2, self.constraint, self.use_central_potential = K, r0, m1, m2, constraint, use_central_potential
+        
+        # Store number of degrees of freedom.
+        self.ndof = 6 - 1*constraint
 
+    def get_potential_expectation(self, state):
+        """Return the expectation of the potential energy, computed analytically or numerically.
 
-class ConstraintCoupledHarmonicOscillator(object):
+        Arguments
+        ---------
+        
+        state : ThermodynamicState with temperature defined
+            The thermodynamic state at which the property is to be computed.
+        
+        Returns
+        -------
+        
+        potential_mean : simtk.unit.Quantity compatible with simtk.unit.kilojoules_per_mole
+            The expectation of the potential energy.
+        
+        """
+
+        return (self.ndof/2.) * kB * state.temperature
+        
+#=============================================================================================
+# Constraint-coupled harmonic oscillator
+#=============================================================================================
+
+class ConstraintCoupledHarmonicOscillator(TestSystem):
     """Create a pair of particles in 3D harmonic oscillator wells, coupled by a constraint.
 
     Parameters
@@ -207,7 +486,7 @@ class ConstraintCoupledHarmonicOscillator(object):
     Attributes
     ----------
     system : simtk.openmm.System
-    coordinates : list
+    positions : list
 
     Notes
     -----
@@ -225,7 +504,7 @@ class ConstraintCoupledHarmonicOscillator(object):
     >>> d = 5.0 * units.angstroms
     >>> K = 1.0 * units.kilocalories_per_mole / units.angstroms**2
     >>> ccho = ConstraintCoupledHarmonicOscillator(K=K, d=d, mass=mass)
-    >>> system, coordinates = ccho.system, ccho.coordinates
+    >>> system, positions = ccho.system, ccho.positions
     """
 
     def __init__(self, 
@@ -240,9 +519,9 @@ class ConstraintCoupledHarmonicOscillator(object):
         system.addParticle(mass)
         system.addParticle(mass)    
 
-        # Set the coordinates.
-        coordinates = units.Quantity(np.zeros([2,3], np.float32), units.angstroms)
-        coordinates[1,0] = d
+        # Set the positions.
+        positions = units.Quantity(np.zeros([2,3], np.float32), units.angstroms)
+        positions[1,0] = d
 
         # Add a restrining potential centered at the origin.
         force = mm.CustomExternalForce('(K/2.0) * ((x-d)^2 + y^2 + z^2)')
@@ -261,11 +540,14 @@ class ConstraintCoupledHarmonicOscillator(object):
         force.addBond(0, 1, d, K)
         system.addForce(force)
         
-        self.system, self.coordinates = system, coordinates
+        self.system, self.positions = system, positions
         self.K, self.d, self.mass = K, d, mass
 
+#=============================================================================================
+# Harmonic oscillator array
+#=============================================================================================
 
-class HarmonicOscillatorArray(object):
+class HarmonicOscillatorArray(TestSystem):
     """Create a 1D array of noninteracting particles in 3D harmonic oscillator wells.
     
     Parameters
@@ -282,7 +564,7 @@ class HarmonicOscillatorArray(object):
     Attributes
     ----------
     system : simtk.openmm.System
-    coordinates : list
+    positions : list
 
     Notes
     -----
@@ -300,7 +582,7 @@ class HarmonicOscillatorArray(object):
     >>> d = 5.0 * units.angstroms
     >>> K = 1.0 * units.kilocalories_per_mole / units.angstroms**2
     >>> ccho = HarmonicOscillatorArray(K=K, d=d, mass=mass)
-    >>> system, coordinates = ccho.system, ccho.coordinates
+    >>> system, positions = ccho.system, ccho.positions
     """
 
     def __init__(self, K=90.0 * units.kilocalories_per_mole/units.angstroms**2,
@@ -315,10 +597,10 @@ class HarmonicOscillatorArray(object):
         for n in range(N):
             system.addParticle(mass)
 
-        # Set the coordinates for a 1D array of particles spaced d apart along the x-axis.
-        coordinates = units.Quantity(np.zeros([N,3], np.float32), units.angstroms)
+        # Set the positions for a 1D array of particles spaced d apart along the x-axis.
+        positions = units.Quantity(np.zeros([N,3], np.float32), units.angstroms)
         for n in range(N):
-            coordinates[n,0] = n*d
+            positions[n,0] = n*d
 
         # Add a restrining potential for each oscillator.
         force = mm.CustomExternalForce('(K/2.0) * ((x-x0)^2 + y^2 + z^2)')
@@ -329,11 +611,53 @@ class HarmonicOscillatorArray(object):
             force.addParticle(n, parameters)
         system.addForce(force)
 
-        self.system, self.coordinates = system, coordinates
+        self.system, self.positions = system, positions
         self.K, self.d, self.mass, self.N = K, d, mass, N
+        self.ndof = 3*N
 
+    def get_potential_expectation(self, state):
+        """Return the expectation of the potential energy, computed analytically or numerically.
 
-class SodiumChlorideCrystal(object):
+        Arguments
+        ---------
+        
+        state : ThermodynamicState with temperature defined
+            The thermodynamic state at which the property is to be computed.
+        
+        Returns
+        -------
+        
+        potential_mean : simtk.unit.Quantity compatible with simtk.unit.kilojoules_per_mole
+            The expectation of the potential energy.
+        
+        """
+
+        return (self.ndof/2.) * kB * state.temperature
+        
+    def get_potential_standard_deviation(self, state):
+        """Return the standard deviation of the potential energy, computed analytically or numerically.
+
+        Arguments
+        ---------
+        
+        state : ThermodynamicState with temperature defined
+            The thermodynamic state at which the property is to be computed.
+
+        Returns
+        -------
+        
+        potential_stddev : simtk.unit.Quantity compatible with simtk.unit.kilojoules_per_mole
+            potential energy standard deviation if implemented, or else None
+        
+        """
+
+        return (self.ndof/2.) * kB * state.temperature
+
+#=============================================================================================
+# Sodium chloride FCC crystal.
+#=============================================================================================
+
+class SodiumChlorideCrystal(TestSystem):
     """Create an FCC crystal of sodium chloride.
 
     Each atom is represented by a charged Lennard-Jones sphere in an Ewald lattice.
@@ -354,7 +678,7 @@ class SodiumChlorideCrystal(object):
     Create sodium chloride crystal unit.
     
     >>> crystal = SodiumChlorideCrystal()
-    >>> system, coordinates = crystal.system, crystal.coordinates
+    >>> system, positions = crystal.system, crystal.positions
     """
     def __init__(self):
         # Set default parameters (from Tinker).
@@ -387,31 +711,34 @@ class SodiumChlorideCrystal(object):
         cutoff = box_size / 2.0 * 0.99
         force.setCutoffDistance(cutoff)
         
-        # Allocate storage for coordinates.
+        # Allocate storage for positions.
         natoms = 2
-        coordinates = units.Quantity(np.zeros([natoms,3], np.float32), units.angstroms)
+        positions = units.Quantity(np.zeros([natoms,3], np.float32), units.angstroms)
 
         # Add sodium ion.
         system.addParticle(mass_Na)
         force.addParticle(q_Na, sigma_Na, epsilon_Na)
-        coordinates[0,0] = 0.0 * units.angstrom
-        coordinates[0,1] = 0.0 * units.angstrom
-        coordinates[0,2] = 0.0 * units.angstrom
+        positions[0,0] = 0.0 * units.angstrom
+        positions[0,1] = 0.0 * units.angstrom
+        positions[0,2] = 0.0 * units.angstrom
         
         # Add chloride atom.
         system.addParticle(mass_Cl)
         force.addParticle(q_Cl, sigma_Cl, epsilon_Cl)
-        coordinates[1,0] = 2.814 * units.angstrom
-        coordinates[1,1] = 2.814 * units.angstrom
-        coordinates[1,2] = 2.814 * units.angstrom
+        positions[1,0] = 2.814 * units.angstrom
+        positions[1,1] = 2.814 * units.angstrom
+        positions[1,2] = 2.814 * units.angstrom
 
         # Add nonbonded force term to the system.
         system.addForce(force)
            
-        self.system, self.coordinates = system, coordinates
+        self.system, self.positions = system, positions
 
+#=============================================================================================
+# Lennard-Jones cluster
+#=============================================================================================
 
-class LennardJonesCluster(object):
+class LennardJonesCluster(TestSystem):
     """Create a non-periodic rectilinear grid of Lennard-Jones particles in a harmonic restraining potential.
 
 
@@ -433,12 +760,12 @@ class LennardJonesCluster(object):
     Create Lennard-Jones cluster.
     
     >>> cluster = LennardJonesCluster()
-    >>> system, coordinates = cluster.system, cluster.coordinates
+    >>> system, positions = cluster.system, cluster.positions
 
     Create default 3x3x3 Lennard-Jones cluster in a harmonic restraining potential.
 
     >>> cluster = LennardJonesCluster(nx=10, ny=10, nz=10)
-    >>> system, coordinates = cluster.system, cluster.coordinates
+    >>> system, positions = cluster.system, cluster.positions
     """
     def __init__(self, nx=3, ny=3, nz=3, K=1.0 * units.kilojoules_per_mole/units.nanometer**2):        
 
@@ -462,7 +789,7 @@ class LennardJonesCluster(object):
         nb = mm.NonbondedForce()
         nb.setNonbondedMethod(mm.NonbondedForce.NoCutoff)
 
-        coordinates = units.Quantity(np.zeros([natoms,3],np.float32), units.angstrom)
+        positions = units.Quantity(np.zeros([natoms,3],np.float32), units.angstrom)
 
         atom_index = 0
         for ii in range(nx):
@@ -474,9 +801,9 @@ class LennardJonesCluster(object):
                     y = sigma_Ar*scaleStepSizeY*(jj - ny/2.0)
                     z = sigma_Ar*scaleStepSizeZ*(kk - nz/2.0)
 
-                    coordinates[atom_index,0] = x
-                    coordinates[atom_index,1] = y
-                    coordinates[atom_index,2] = z
+                    positions[atom_index,0] = x
+                    positions[atom_index,1] = y
+                    positions[atom_index,2] = z
                     atom_index += 1
 
         # Add the nonbonded force.
@@ -489,10 +816,13 @@ class LennardJonesCluster(object):
             force.addParticle(particle_index, [])
         system.addForce(force)
 
-        self.system, self.coordinates = system, coordinates
+        self.system, self.positions = system, positions
 
+#=============================================================================================
+# Lennard-Jones fluid
+#=============================================================================================
 
-class LennardJonesFluid(object):
+class LennardJonesFluid(TestSystem):
     """Create a periodic rectilinear grid of Lennard-Jones particles.    
     Parameters for argon are used by default. Cutoff is set to 3 sigma by default.
     
@@ -523,17 +853,17 @@ class LennardJonesFluid(object):
     Create default-size Lennard-Jones fluid.
 
     >>> fluid = LennardJonesFluid()
-    >>> system, coordinates = fluid.system, fluid.coordinates
+    >>> system, positions = fluid.system, fluid.positions
 
     Create a larger 10x8x5 box of Lennard-Jones particles.
 
     >>> fluid = LennardJonesFluid(nx=10, ny=8, nz=5)
-    >>> system, coordinates = fluid.system, fluid.coordinates
+    >>> system, positions = fluid.system, fluid.positions
 
     Create Lennard-Jones fluid using switched particle interactions (switched off betwee 7 and 9 A) and more particles.
 
     >>> fluid = LennardJonesFluid(nx=10, ny=10, nz=10, switch=7.0*units.angstroms, cutoff=9.0*units.angstroms)
-    >>> system, coordinates = fluid.system, fluid.coordinates
+    >>> system, positions = fluid.system, fluid.positions
     """
 
     def __init__(self, nx=6, ny=6, nz=6, 
@@ -579,7 +909,7 @@ class LennardJonesFluid(object):
             nb.setCutoffDistance(cutoff)
             nb.setUseDispersionCorrection(dispersion_correction)
             
-        coordinates = units.Quantity(np.zeros([natoms,3],np.float32), units.angstrom)
+        positions = units.Quantity(np.zeros([natoms,3],np.float32), units.angstrom)
 
         maxX = 0.0 * units.angstrom
         maxY = 0.0 * units.angstrom
@@ -598,12 +928,12 @@ class LennardJonesFluid(object):
                     y = sigma*scaleStepSizeY*jj
                     z = sigma*scaleStepSizeZ*kk
 
-                    coordinates[atom_index,0] = x
-                    coordinates[atom_index,1] = y
-                    coordinates[atom_index,2] = z
+                    positions[atom_index,0] = x
+                    positions[atom_index,1] = y
+                    positions[atom_index,2] = z
                     atom_index += 1
                     
-                    # Wrap coordinates as needed.
+                    # Wrap positions as needed.
                     if x>maxX: maxX = x
                     if y>maxY: maxY = y
                     if z>maxZ: maxZ = z
@@ -621,10 +951,13 @@ class LennardJonesFluid(object):
         # Add the nonbonded force.
         system.addForce(nb)
 
-        self.system, self.coordinates = system, coordinates
+        self.system, self.positions = system, positions
 
+#=============================================================================================
+# Custom Lennard-Jones fluid
+#=============================================================================================
 
-class CustomLennardJonesFluid(object):
+class CustomLennardJonesFluid(TestSystem):
     """Create a periodic rectilinear grid of Lennard-Jones particled, but implemented via CustomBondForce rather than NonbondedForce.
     Parameters for argon are used by default. Cutoff is set to 3 sigma by default.
     
@@ -660,17 +993,17 @@ class CustomLennardJonesFluid(object):
     Create default-size Lennard-Jones fluid.
 
     >>> fluid = CustomLennardJonesFluid()
-    >>> system, coordinates = fluid.system, fluid.coordinates
+    >>> system, positions = fluid.system, fluid.positions
 
     Create a larger 10x8x5 box of Lennard-Jones particles.
 
     >>> fluid = CustomLennardJonesFluid(nx=10, ny=8, nz=5)
-    >>> system, coordinates = fluid.system, fluid.coordinates
+    >>> system, positions = fluid.system, fluid.positions
 
     Create Lennard-Jones fluid using switched particle interactions (switched off betwee 7 and 9 A) and more particles.
 
     >>> fluid = CustomLennardJonesFluid(nx=10, ny=10, nz=10, switch=7.0*units.angstroms, cutoff=9.0*units.angstroms)
-    >>> system, coordinates = fluid.system, fluid.coordinates
+    >>> system, positions = fluid.system, fluid.positions
     """
 
     def __init__(self, nx=6, ny=6, nz=6, 
@@ -715,7 +1048,7 @@ class CustomLennardJonesFluid(object):
             nb.setNonbondedMethod(mm.CustomNonbondedForce.CutoffPeriodic)
             nb.setCutoffDistance(cutoff)        
             
-        coordinates = units.Quantity(np.zeros([natoms,3],np.float32), units.angstrom)
+        positions = units.Quantity(np.zeros([natoms,3],np.float32), units.angstrom)
 
         maxX = 0.0 * units.angstrom
         maxY = 0.0 * units.angstrom
@@ -731,12 +1064,12 @@ class CustomLennardJonesFluid(object):
                     y = sigma*scaleStepSizeY*jj
                     z = sigma*scaleStepSizeZ*kk
 
-                    coordinates[atom_index,0] = x
-                    coordinates[atom_index,1] = y
-                    coordinates[atom_index,2] = z
+                    positions[atom_index,0] = x
+                    positions[atom_index,1] = y
+                    positions[atom_index,2] = z
                     atom_index += 1
                     
-                    # Wrap coordinates as needed.
+                    # Wrap positions as needed.
                     if x>maxX: maxX = x
                     if y>maxY: maxY = y
                     if z>maxZ: maxZ = z
@@ -769,10 +1102,13 @@ class CustomLennardJonesFluid(object):
                 force.addParticle(i, [])
             system.addForce(force)
         
-        self.system, self.coordinates = system, coordinates
+        self.system, self.positions = system, positions
 
+#=============================================================================================
+# Ideal gas
+#=============================================================================================
 
-class IdealGas(object):
+class IdealGas(TestSystem):
     """Create an 'ideal gas' of noninteracting particles in a periodic box.
 
     Parameters
@@ -791,12 +1127,12 @@ class IdealGas(object):
     Create an ideal gas system.
 
     >>> gas = IdealGas()
-    >>> system, coordinates = gas.system, gas.coordinates
+    >>> system, positions = gas.system, gas.positions
 
     Create a smaller ideal gas system containing 64 particles.
 
     >>> gas = IdealGas(nparticles=64)
-    >>> system, coordinates = gas.system, gas.coordinates
+    >>> system, positions = gas.system, gas.positions
 
     """
 
@@ -823,19 +1159,157 @@ class IdealGas(object):
         for index in range(nparticles):
             system.addParticle(mass)
         
-        # Place particles at random coordinates within the box.
+        # Place particles at random positions within the box.
         # TODO: Use reproducible seed.
         # NOTE: This may not be thread-safe.
 
         state = np.random.get_state()
         np.random.seed(0)
-        coordinates = units.Quantity((length/units.nanometer) * np.random.rand(nparticles,3), units.nanometer)
+        positions = units.Quantity((length/units.nanometer) * np.random.rand(nparticles,3), units.nanometer)
         np.random.set_state(state)
 
-        self.system, self.coordinates = system, coordinates
+        self.system, self.positions = system, positions
+        self.ndof = 3 * nparticles
 
+    def get_potential_expectation(self, state):
+        """Return the expectation of the potential energy, computed analytically or numerically.
 
-class WaterBox(object):
+        Arguments
+        ---------
+        
+        state : ThermodynamicState with temperature defined
+            The thermodynamic state at which the property is to be computed.
+        
+        Returns
+        -------
+        
+        potential_mean : simtk.unit.Quantity compatible with simtk.unit.kilojoules_per_mole
+            The expectation of the potential energy.
+        
+        """
+
+        return 0.0 * units.kilojoules_per_mole
+        
+    def get_potential_standard_deviation(self, state):
+        """Return the standard deviation of the potential energy, computed analytically or numerically.
+
+        Arguments
+        ---------
+        
+        state : ThermodynamicState with temperature defined
+            The thermodynamic state at which the property is to be computed.
+
+        Returns
+        -------
+        
+        potential_stddev : simtk.unit.Quantity compatible with simtk.unit.kilojoules_per_mole
+            potential energy standard deviation if implemented, or else None
+        
+        """
+
+        return 0.0 * units.kilojoules_per_mole
+
+    def get_kinetic_expectation(self, state):
+        """Return the expectation of the kinetic energy, computed analytically or numerically.
+
+        Arguments
+        ---------
+        
+        state : ThermodynamicState with temperature defined
+            The thermodynamic state at which the property is to be computed.
+        
+        Returns
+        -------
+        
+        potential_mean : simtk.unit.Quantity compatible with simtk.unit.kilojoules_per_mole
+            The expectation of the potential energy.
+        
+        """
+
+        return (3./2.) * kB * state.temperature 
+        
+    def get_kinetic_standard_deviation(self, state):
+        """Return the standard deviation of the kinetic energy, computed analytically or numerically.
+
+        Arguments
+        ---------
+        
+        state : ThermodynamicState with temperature defined
+            The thermodynamic state at which the property is to be computed.
+
+        Returns
+        -------
+        
+        potential_stddev : simtk.unit.Quantity compatible with simtk.unit.kilojoules_per_mole
+            potential energy standard deviation if implemented, or else None
+        
+        """
+
+        return (3./2.) * kB * state.temperature 
+
+    def get_volume_expectation(self, state):
+        """Return the expectation of the volume, computed analytically.
+
+        Arguments
+        ---------
+        
+        state : ThermodynamicState with temperature and pressure defined
+            The thermodynamic state at which the property is to be computed.
+        
+        Returns
+        -------
+        
+        volume_mean : simtk.unit.Quantity compatible with simtk.unit.nanometers**3
+            The expectation of the volume at equilibrium.
+        
+        Notes
+        -----
+        
+        The true mean volume is used, rather than the large-N limit.
+
+        """
+        
+        if not state.pressure:
+            box_vectors = self.system.getDefaultPeriodicBoxVectors()
+            volume = box_vectors[0][0] * box_vectors[1][1] * box_vectors[2][2] 
+            return volume
+
+        N = self._system.getNumParticles()
+        return ((N+1) * units.BOLTZMANN_CONSTANT_kB * state.temperature / state.pressure).in_units_of(units.nanometers**3)
+        
+    def get_volume_standard_deviation(self, state):
+        """Return the standard deviation of the volume, computed analytically.
+
+        Arguments
+        ---------
+        
+        state : ThermodynamicState with temperature and pressure defined
+            The thermodynamic state at which the property is to be computed.
+
+        Returns
+        -------
+        
+        volume_stddev : simtk.unit.Quantity compatible with simtk.unit.nanometers**3
+            The standard deviation of the volume at equilibrium.
+        
+        Notes
+        -----
+        
+        The true mean volume is used, rather than the large-N limit.
+
+        """
+        
+        if not state.pressure:
+            return 0.0 * units.nanometers**3
+
+        N = self._system.getNumParticles()
+        return (numpy.sqrt(N+1) * units.BOLTZMANN_CONSTANT_kB * state.temperature / state.pressure).in_units_of(units.nanometers**3)
+    
+#=============================================================================================
+# Water box
+#=============================================================================================
+
+class WaterBox(TestSystem):
     """Create a test system containing a periodic box of TIP3P water.
 
     Flexible bonds and angles are always added, and constraints are optional (but on by default).
@@ -851,7 +1325,7 @@ class WaterBox(object):
         If None, defaults to box_size / 2.0 * 0.999
     nonbonded_method : default=None
     filename : str, optional, default="watbox216.pdb"
-        name of file containing water coordinates    
+        name of file containing water positions    
     charges : bool, optional, default=True        
     
     Examples
@@ -860,7 +1334,7 @@ class WaterBox(object):
     Create a 216-water system.
     
     >>> water_box = WaterBox()
-    >>> (system, coordinates) = water_box.system, water_box.coordinates
+    >>> (system, positions) = water_box.system, water_box.positions
 
     TODO
     ----
@@ -905,7 +1379,7 @@ class WaterBox(object):
 
         def loadCoordsHOH(infile):
             """
-            Load water coordinates from a PDB file.
+            Load water positions from a PDB file.
             
             """
             pdbData = []
@@ -951,7 +1425,7 @@ class WaterBox(object):
         # Add water molecules to system
         # Note that no bond forces are used. Bond lenths are rigid
         count = 0
-        coordinates = units.Quantity(np.zeros([natoms,3], np.float32), units.nanometer)
+        positions = units.Quantity(np.zeros([natoms,3], np.float32), units.nanometer)
         for atomNum, atomName, resName, resNum, xyz in pdbData:
             if atomName in ['O', 'OW']:
                 # Add an oxygen atom
@@ -993,13 +1467,13 @@ class WaterBox(object):
             else:
                 raise Exception("bad atom : %s" % atomName)
             for k in range(3):
-                coordinates[count,k] = xyz[k]        
+                positions[count,k] = xyz[k]        
             count += 1
 
         # Determine box size from maximum extent.
         box_extents = units.Quantity(np.zeros([3]), units.nanometers)
         for k in range(3):
-            box_extents[k] = (coordinates[:,k] / units.nanometers).max() * units.nanometers - (coordinates[:,k] / units.nanometers).min() * units.nanometers
+            box_extents[k] = (positions[:,k] / units.nanometers).max() * units.nanometers - (positions[:,k] / units.nanometers).min() * units.nanometers
         box_size = (box_extents / units.nanometers).max() * units.nanometers 
         
         # Set box vectors.
@@ -1022,10 +1496,13 @@ class WaterBox(object):
             system.addForce(bond)
             system.addForce(angle)
 
-        self.system, self.coordinates = system, coordinates
+        self.system, self.positions = system, positions
 
+#=============================================================================================
+# Alanine dipeptide in implicit solvent.
+#=============================================================================================
 
-class AlanineDipeptideImplicit(object):
+class AlanineDipeptideImplicit(TestSystem):
     """Alanine dipeptide ff96 in OBC GBSA implicit solvent.
     
     Parameters
@@ -1037,7 +1514,7 @@ class AlanineDipeptideImplicit(object):
     --------
     
     >>> alanine = AlanineDipeptideImplicit()
-    >>> (system, coordinates) = alanine.system, alanine.coordinates
+    >>> (system, positions) = alanine.system, alanine.positions
     """
 
     def __init__(self, flexibleConstraints=True, shake='h-bonds'):
@@ -1052,14 +1529,17 @@ class AlanineDipeptideImplicit(object):
         prmtop = app.AmberPrmtopFile(prmtop_filename)
         system = prmtop.createSystem(implicitSolvent=app.OBC1, constraints=app.HBonds, nonbondedCutoff=None)
 
-        # Read coordinates.
+        # Read positions.
         inpcrd = app.AmberInpcrdFile(crd_filename)
-        coordinates = inpcrd.getPositions(asNumpy=True)
+        positions = inpcrd.getPositions(asNumpy=True)
 
-        self.system, self.coordinates = system, coordinates
+        self.system, self.positions = system, positions
 
+#=============================================================================================
+# Alanine dipeptide in explicit solvent
+#=============================================================================================
 
-class AlanineDipeptideExplicit(object):
+class AlanineDipeptideExplicit(TestSystem):
     """Alanine dipeptide ff96 in TIP3P explicit solvent with PME electrostatics.
     
     Parameters
@@ -1067,15 +1547,17 @@ class AlanineDipeptideExplicit(object):
     flexibleConstraints : bool, optional, default=True
     shake : string, optional, default="h-bonds"
     nonbondedCutoff : Quantity, optional, default=9.0 * units.angstroms
+    use_dispersion_correction : bool, optional, default=True
+        If True, the long-range disperson correction will be used.
     
     Examples
     --------
     
     >>> alanine = AlanineDipeptideExplicit()
-    >>> (system, coordinates) = alanine.system, alanine.coordinates
+    >>> (system, positions) = alanine.system, alanine.positions
     """
 
-    def __init__(self, flexibleConstraints=True, shake='h-bonds', nonbondedCutoff=9.0 * units.angstroms):       
+    def __init__(self, flexibleConstraints=True, shake='h-bonds', nonbondedCutoff=9.0 * units.angstroms, use_dispersion_correction=True):
 
         # Determine prmtop and crd filenames in test directory.
         # TODO: This will need to be revised in order to be able to find the test systems.
@@ -1087,18 +1569,25 @@ class AlanineDipeptideExplicit(object):
         prmtop = app.AmberPrmtopFile(prmtop_filename)
         system = prmtop.createSystem(constraints=app.HBonds, nonbondedMethod=app.PME, rigidWater=True, nonbondedCutoff=0.9*units.nanometer)
 
-        # Read coordinates.
+        # Set dispersion correction use.
+        forces = { system.getForce(index).__class__.__name__ : system.getForce(index) for index in range(system.getNumForces()) }
+        forces['NonbondedForce'].setUseDispersionCorrection(use_dispersion_correction)
+
+        # Read positions.
         inpcrd = app.AmberInpcrdFile(crd_filename, loadBoxVectors=True)
-        coordinates = inpcrd.getPositions(asNumpy=True)
+        positions = inpcrd.getPositions(asNumpy=True)
 
         # Set box vectors.
         box_vectors = inpcrd.getBoxVectors(asNumpy=True)
         system.setDefaultPeriodicBoxVectors(box_vectors[0], box_vectors[1], box_vectors[2])
         
-        self.system, self.coordinates = system, coordinates
+        self.system, self.positions = system, positions
 
+#=============================================================================================
+# T4 lysozyme L99A mutant with p-xylene ligand.
+#=============================================================================================
 
-class LysozymeImplicit(object):
+class LysozymeImplicit(TestSystem):
     """T4 lysozyme L99A (AMBER ff96) with p-xylene ligand (GAFF + AM1-BCC) in implicit OBC GBSA solvent.
 
     Parameters
@@ -1110,7 +1599,7 @@ class LysozymeImplicit(object):
     --------
     
     >>> lysozyme = LysozymeImplicit()
-    >>> (system, coordinates) = lysozyme.system, lysozyme.coordinates
+    >>> (system, positions) = lysozyme.system, lysozyme.positions
     """
 
     def __init__(self, flexibleConstraints=True, shake='h-bonds'):
@@ -1124,20 +1613,20 @@ class LysozymeImplicit(object):
         prmtop = app.AmberPrmtopFile(prmtop_filename)
         system = prmtop.createSystem(implicitSolvent=app.OBC1, constraints=app.HBonds, nonbondedCutoff=None)
 
-        # Read coordinates.
+        # Read positions.
         inpcrd = app.AmberInpcrdFile(crd_filename)
-        coordinates = inpcrd.getPositions(asNumpy=True)
+        positions = inpcrd.getPositions(asNumpy=True)
         
-        self.system, self.coordinates = system, coordinates
+        self.system, self.positions = system, positions
 
 
-class SrcImplicit(object):
+class SrcImplicit(TestSystem):
     """Src kinase in implicit AMBER 99sb-ildn with OBC GBSA solvent.
 
     Examples
     --------
     >>> src = SrcImplicit()
-    >>> system, coordinates = src.system, src.coordinates
+    >>> system, positions = src.system, src.positions
     """
     
     def __init__(self):
@@ -1155,19 +1644,22 @@ class SrcImplicit(object):
         forcefield = app.ForceField(*forcefields_to_use)
         system = forcefield.createSystem(pdbfile.topology, nonbondedMethod=app.NoCutoff, constraints=app.HBonds)
 
-        # Get coordinates.
-        coordinates = pdbfile.getPositions()
+        # Get positions.
+        positions = pdbfile.getPositions()
         
-        self.system, self.coordinates = system, coordinates
+        self.system, self.positions = system, positions
 
+#=============================================================================================
+# Src kinase in explicit solvent.
+#=============================================================================================
 
-class SrcExplicit(object):
+class SrcExplicit(TestSystem):
     """Src kinase (AMBER 99sb-ildn) in explicit TIP3P solvent.
 
     Examples
     --------
     >>> src = SrcExplicit()
-    >>> system, coordinates = src.system, src.coordinates
+    >>> system, positions = src.system, src.positions
 
     """
     def __init__(self):
@@ -1186,14 +1678,17 @@ class SrcExplicit(object):
         serialized_state = mm.XmlSerializer.deserialize(infile.read())
         infile.close()
 
-        coordinates = serialized_state.getPositions()
+        positions = serialized_state.getPositions()
         box_vectors = serialized_state.getPeriodicBoxVectors()
         system.setDefaultPeriodicBoxVectors(*box_vectors)
         
-        self.system, self.coordinates = system, coordinates
+        self.system, self.positions = system, positions
 
+#=============================================================================================
+# Methanol box.
+#=============================================================================================
 
-class MethanolBox(object):
+class MethanolBox(TestSystem):
     """Methanol box.
 
     Parameters
@@ -1207,7 +1702,7 @@ class MethanolBox(object):
     --------
     
     >>> methanol_box = MethanolBox()
-    >>> system, coordinates = methanol_box.system, methanol_box.coordinates
+    >>> system, positions = methanol_box.system, methanol_box.positions
     """
 
     def __init__(self, flexibleConstraints=True, shake='h-bonds', nonbondedCutoff=7.0 * units.angstroms, nonbondedMethod='CutoffPeriodic'):
@@ -1223,21 +1718,21 @@ class MethanolBox(object):
         prmtop = app.AmberPrmtopFile(prmtop_filename)
         system = prmtop.createSystem(constraints=app.HBonds, nonbondedMethod=app.PME, rigidWater=True, nonbondedCutoff=0.9*units.nanometer)
 
-        # Read coordinates.
+        # Read positions.
         inpcrd = app.AmberInpcrdFile(crd_filename, loadBoxVectors=True)
-        coordinates = inpcrd.getPositions(asNumpy=True)
+        positions = inpcrd.getPositions(asNumpy=True)
 
         # Set box vectors.
         box_vectors = inpcrd.getBoxVectors(asNumpy=True)
         system.setDefaultPeriodicBoxVectors(box_vectors[0], box_vectors[1], box_vectors[2])
         
-        self.system, self.coordinates = system, coordinates
+        self.system, self.positions = system, positions
 
 #=============================================================================================
 # Molecular ideal gas (methanol box).
 #=============================================================================================
 
-class MolecularIdealGas(object):
+class MolecularIdealGas(TestSystem):
     """Molecular ideal gas (methanol box).
 
     Parameters
@@ -1251,7 +1746,7 @@ class MolecularIdealGas(object):
     --------
     
     >>> methanol_box = MolecularIdealGas()
-    >>> system, coordinates = methanol_box.system, methanol_box.coordinates
+    >>> system, positions = methanol_box.system, methanol_box.positions
     """
 
     def __init__(self, flexibleConstraints=True, shake=None, nonbondedCutoff=7.0 * units.angstroms, nonbondedMethod='CutoffPeriodic'):
@@ -1309,18 +1804,21 @@ class MolecularIdealGas(object):
                 # Don't add any other forces.
                 pass
 
-        # Read coordinates.
+        # Read positions.
         inpcrd = app.AmberInpcrdFile(crd_filename, loadBoxVectors=True)
-        coordinates = inpcrd.getPositions(asNumpy=True)
+        positions = inpcrd.getPositions(asNumpy=True)
 
         # Set box vectors.
         box_vectors = inpcrd.getBoxVectors(asNumpy=True)
         system.setDefaultPeriodicBoxVectors(box_vectors[0], box_vectors[1], box_vectors[2])
         
-        self.system, self.coordinates = system, coordinates
+        self.system, self.positions = system, positions
 
+#=============================================================================================
+# System of particles with CustomGBForce
+#=============================================================================================
 
-class CustomGBForceSystem(object):
+class CustomGBForceSystem(TestSystem):
     """A system of particles with a CustomGBForce.
 
     Notes
@@ -1332,7 +1830,7 @@ class CustomGBForceSystem(object):
     --------
     
     >>> gb_system = CustomGBForceSystem()
-    >>> system, coordinates = gb_system.system, gb_system.coordinates
+    >>> system, positions = gb_system.system, gb_system.positions
     """
 
     def __init__(self):
@@ -1412,23 +1910,44 @@ class CustomGBForceSystem(object):
         system.addForce(nonbonded)
         system.addForce(custom)    
 
-        # Place particles at random coordinates within the box.
+        # Place particles at random positions within the box.
         # TODO: Use reproducible random number seed.
         # NOTE: This may not be thread-safe.
         
         state = np.random.get_state()
         np.random.seed(0)
-        coordinates = units.Quantity((boxSize/units.nanometer) * np.random.rand(numParticles,3), units.nanometer)
+        positions = units.Quantity((boxSize/units.nanometer) * np.random.rand(numParticles,3), units.nanometer)
         np.random.set_state(state)
 
-        self.system, self.coordinates = system, coordinates
+        self.system, self.positions = system, positions
+
+#=============================================================================================
+# Definte dest system names
+#=============================================================================================
+
+testsystem_classes = [cls for cls in vars()['TestSystem'].__subclasses__()]
 
 #=============================================================================================
 # MAIN AND TESTS
 #=============================================================================================
 
 if __name__ == "__main__":
+    # Run doctests.
     import doctest
-
     doctest.testmod()    
+    
+    # Make sure all advertised analytical properties can be computed.
+    import simtk.unit as u
+    state = ThermodynamicState(temperature=300.0*u.kelvin, pressure=1.0*u.atmosphere)
+    testsystem_classes = [cls for cls in vars()['TestSystem'].__subclasses__()]
+    print "Testing analytical property computation:"
+    for testsystem_class in testsystem_classes:
+        class_name = testsystem_class.__name__
+        testsystem = testsystem_class()
+        property_list = testsystem.analytical_properties
+        if len(property_list) > 0:
+            for property_name in property_list:
+                method = getattr(testsystem, 'get_' + property_name)
+                print "%32s . %32s : %32s" % (class_name, property_name, str(method(state)))
+
 
