@@ -1,4 +1,4 @@
-"""Test systems for Yank
+"""OpenMM test systems.
 
 """
 
@@ -49,18 +49,18 @@ Operating System :: MacOS
 
 extensions = []
 
-setup(name='repex',
+setup(name='openmm-testsystems',
       author='Kyle A. Beauchamp',
       author_email='kyleabeauchamp@gmail.com',
       description=DOCLINES[0],
       long_description="\n".join(DOCLINES[2:]),
       version=__version__,
       license='GPLv3+',
-      url='http://github.com/ChoderaLab/repex',
+      url='http://github.com/choderalab/openmm-testsystems',
       platforms=['Linux', 'Mac OS-X', 'Unix'],
       classifiers=CLASSIFIERS.splitlines(),
       packages=["testsystems"],
-      package_dir={'mdtraj': 'MDTraj', 'mdtraj.scripts': 'scripts'},
+      #package_dir={'': 'testsystems'},
       install_requires=['numpy', 'nose', 'nose-exclude'],
       zip_safe=False,
       scripts=[],

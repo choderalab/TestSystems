@@ -44,7 +44,7 @@ import math
 import simtk.unit as units
 import simtk.openmm as openmm
 
-import test_systems as testsystems
+import testsystems
 
 #=============================================================================================
 # SUBROUTINES
