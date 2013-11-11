@@ -1,3 +1,8 @@
+THIS REPO IS DEPRECATED
+=======================
+
+See https://github.com/choderalab/Repex/
+
 OpenMM Test Systems
 ===========
 
